@@ -37,22 +37,30 @@ class kinectBasicApp : public AppBasic {
 	Surface				mDepthSurface;
 //	Surface				mColorSurface;
 	float				mThreshold, mBlobMin, mBlobMax;
-	int					mBlur;
+	int					mBlur, mVthresh, mHthresh, mSthresh;
 	params::InterfaceGl	mParams;
 };
 
 void kinectBasicApp::prepareSettings( Settings* settings )
 {
+	
+	mVthresh = 200;
+	mHthresh = 500;
+	mSthresh = 500;
+	
 	settings->setWindowSize( 1280, 800 );
 	mThreshold = 70.0f;
 	mBlur = 10.0;
 	mBlobMin = 40.0;
 	mBlobMax = 200.0;
 	mParams = params::InterfaceGl("WakaWaka", Vec2i(200,100));
-	mParams.addParam( "Threshold", &mThreshold, "min=0.0 max=255.0 step=1.0 keyIncr=2 keyDecr=1" );
-	mParams.addParam( "Blur", &mBlur, "min=1.0 max=100.0 step=1.0 keyIncr=4 keyDecr=3" );
-	mParams.addParam( "BlobMin", &mBlobMin, "min=1.0 max=500.0 step=5.0 keyIncr=6 keyDecr=5" );
-	mParams.addParam( "BlobMax", &mBlobMax, "min=1.0 max=500.0 step=5.0 keyIncr=8 keyDecr=7" );
+//	mParams.addParam( "Threshold", &mThreshold, "min=0.0 max=255.0 step=1.0 keyIncr=2 keyDecr=1" );
+//	mParams.addParam( "Blur", &mBlur, "min=1.0 max=100.0 step=1.0 keyIncr=4 keyDecr=3" );
+//	mParams.addParam( "BlobMin", &mBlobMin, "min=1.0 max=500.0 step=5.0 keyIncr=6 keyDecr=5" );
+//	mParams.addParam( "BlobMax", &mBlobMax, "min=1.0 max=500.0 step=5.0 keyIncr=8 keyDecr=7" );
+	mParams.addParam( "H thresh", &mHthresh, "min=0.0 max=500.0 step=5.0 keyIncr=h keyDecr=g");
+	mParams.addParam( "S thresh", &mSthresh, "min=0.0 max=500.0 step=5.0 keyIncr=s keyDecr=a");
+	mParams.addParam( "V thresh", &mVthresh, "min=0.0 max=500.0 step=5.0 keyIncr=v keyDecr=c");
 	//settings->setWindowSize( 640, 480 );
 }
 
@@ -273,7 +281,9 @@ void kinectBasicApp::update()
 		mTexG = this->threshholdTextureFromChannelSurface(this->surfaceFromChannel(rgbImage, 1));
 		mTexB = this->threshholdTextureFromChannelSurface(this->surfaceFromChannel(rgbImage, 2));
 		 */
-		
+
+		// Threshold Channel overlap
+/*		
 		// 1 Get surfaces for each channel
 		Surface rSurface = this->surfaceFromChannel(rgbImage, 0);
 		Surface gSurface = this->surfaceFromChannel(rgbImage, 1);
@@ -300,6 +310,110 @@ void kinectBasicApp::update()
 		}
 		
 		mRGBThreshTexture = gl::Texture(rgbThresh);
+*/
+		
+		
+		// Color range isolation
+		
+		// 1) Convert Color to HSV
+		cv::Mat input(toOcv(rgbImage)), img_hsv_;
+		cv::cvtColor(input, img_hsv_, CV_RGB2HSV);
+		Surface hsvImage(fromOcv(img_hsv_)), hueImage(640, 480, false);
+		
+		
+		Surface::ConstIter hsvIter = hsvImage.getIter();
+		Surface::Iter hueIter = hueImage.getIter();
+		while(hsvIter.line()){
+			while (hsvIter.pixel()) {
+				int x = hsvIter.x();
+				int y = hsvIter.y();
+				ColorA8u hsvPix = hsvImage.getPixel(Vec2i(x,y));
+				int h = 0;
+				// r == saturation // r > 100 only shows saturated red and it's not affected by shadow
+				// g == color
+				// b == brightness?
+				if((hsvPix.g > 230 || hsvPix.g < 30) && hsvPix.r > 100) h = 255;
+				hueImage.setPixel(Vec2i(x,y), ColorA8u(h,h,h));
+			}
+		}
+		/*
+		cv::Mat hueInput(toOcv(hueImage)), blurred, thresholded, output;
+		cv::blur(hueInput, blurred, cv::Size(10, 10));
+		cv::threshold(blurred, thresholded, mThreshold, 255, CV_THRESH_BINARY);
+		cv::cvtColor(thresholded, output, CV_GRAY2RGB );
+		mRGBThreshTexture = gl::Texture(fromOcv(output));
+		*/
+		mRGBThreshTexture = this->threshholdTexture(hueImage);
+		
+//		Surface hsvImage(fromOcv(img_hsv_)), hueImage(640, 480, false);
+		
+		/*
+		Surface::ConstIter hsvIter = hsvImage.getIter();
+		Surface::Iter hueIter = hueImage.getIter();
+		while( hsvIter.line() && hueIter.line() ) { // line by line
+			while( hsvIter.pixel() && hueIter.pixel()) { // pixel by pixel
+				int x = hsvIter.x();
+				int y = hsvIter.y();
+				Vec2i loc(x,y);				
+				int h = *hsvImage.getDataRed(loc);// This really seems like brightness
+				int s = *hsvImage.getDataGreen(loc); // Brightness?
+				int v = *hsvImage.getDataBlue(loc);				
+//				bool show = v < mVthresh && h < mHthresh && s < mSthresh;
+				bool show = h < 60 || h > 200;
+				hueIter.r() = show ? 255 : 0; //*rThresh.getDataRed(Vec2i(x,y)); //.getChannelRed().getValue(Vec2i(x,y));//chValue;
+				hueIter.g() = show ? 255 : 0; //*gThresh.getDataGreen(Vec2i(x,y)); //.getChannelGreen().getValue(Vec2i(x,y));//gThresh.getDataRed(Vec2i(x,y));//chValue;
+				hueIter.b() = show ? 255 : 0; //*bThresh.getDataBlue(Vec2i(x,y)); //.getChannelBlue().getValue(Vec2i(x,y));//*bThresh.getDataRed(Vec2i(x,y));//chValue;
+//				hueIter.a() = 255; //255.0;
+			}
+		}
+		
+		mRGBThreshTexture = hueImage;
+		 */
+		
+//		cv::cvtColor(input, img_hsv_, CV_RGBA2RGB);
+		//Channel8u hueChannel(rows, cols);		
+		
+		//console() << "cols: " << cols << " rows: " << rows << std::endl;
+		
+//		cv::Mat img_out_(rows, cols, CV_RGB);
+
+		// Zero Matrices
+/*		cv::Mat img_out_ = input.clone();
+		cv::Mat img_hue_ = cv::Mat::zeros(img_hsv_.cols, img_hsv_.rows, CV_8U);
+		cv::Mat img_sat_ = cv::Mat::zeros(img_hsv_.cols, img_hsv_.rows, CV_8U);
+		cv::Mat img_bin_ = cv::Mat::zeros(img_hsv_.cols, img_hsv_.rows, CV_8U);
+		int from_to[] = {0,0, 1,1};
+		cv::Mat img_split[] = { img_hue_, img_sat_ };
+		cv::mixChannels(&img_hsv_, 3, img_split, 2, from_to, 2);
+*/		
+		
+//		console() << "img_hsv_.cols: " << img_hsv_.cols << " img_hsv_.rows: " << img_hsv_.rows << std::endl;
+//		console() << "hueImage.cols: " << hueImage.getWidth() << " hueImage.rows: " << hueImage.getHeight() << std::endl;
+		// 2) Isolate pixels that have an H within range
+		
+		
+		
+/*		// Display Input image
+		cv::imshow ("input", img_in_);
+		// Display Binary Image
+		cv::imshow ("binary image", img_bin_);
+		// Display segmented image
+		cv::imshow ("segmented output", img_out_);
+*/
+//		mRGBThreshTexture = gl::Texture(fromOcv(img_bin_));
+//		mRGBThreshTexture = hueImage;
+//		mRGBThreshTexture = gl::Texture(Channel(fromOcv(img_bin_)));
+		
+//		mRGBThreshTexture = gl::Texture(fromOcv(img_bin_));
+//		mRGBThreshTexture = gl::Texture(hueChannel);
+//		console() << "mRGBThreshTexture: " << mRGBThreshTexture << std::endl;
+	
+		// 3) Create new channel that only shows those pixels
+		// ... test 
+		// 4) Blur
+		// 5) Threshold
+		// 6) Blob detect
+		
 	}
 	
 //	console() << "Accel: " << mKinect.getAccel() << std::endl;
