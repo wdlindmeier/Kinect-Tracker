@@ -6,6 +6,7 @@
 #include "cinder/Utilities.h"
 #include "cinder/Rand.h"
 #include "cinder/params/Params.h"
+#include "cinder/ip/Resize.h"
 
 #include "Kinect.h"
 #include "CinderOpenCV.h"
@@ -34,9 +35,12 @@ public:
 	Kinect				mKinect;
 	gl::Texture			mTextureTopLeft, mTextureTopRight, mTextureBottomLeft, mTextureBottomRight;
 	float				mThreshold, mBlobMin, mBlobMax;
+	float				xCalibration, yCalibration, depthCalibration, scaleCalibration;
+	float				pointerX, pointerY;
 	int					mBlur, mVthresh, mHthresh, mSthresh;
 	int					maxColorThresh, minColorThresh;
 	int					mColorMode, minSaturation, minVal;
+	uint8_t pointerDepth;
 	params::InterfaceGl	mParams;
 };
 
@@ -52,21 +56,33 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	mHthresh = 500;
 	mSthresh = 500;
 	
+//	xCalibration, yCalibration, depthCalibration = 0.0;
+//	scaleCalibration = 1.0;
+	
+	xCalibration = -22.0;
+	yCalibration = -34.0;
+	scaleCalibration = 1.08;	
+	pointerX = 100.0;
+	pointerY = 100.0;
+	
 	settings->setWindowSize( 1280, 800); //960 );
 	mThreshold = 70.0f;
 	mBlur = 10.0;
 	mBlobMin = 40.0;
 	mBlobMax = 200.0;
 	mParams = params::InterfaceGl("WakaWaka", Vec2i(200,100));
-	//	mParams.addParam( "Threshold", &mThreshold, "min=0.0 max=255.0 step=1.0 keyIncr=2 keyDecr=1" );
-	//	mParams.addParam( "Blur", &mBlur, "min=1.0 max=100.0 step=1.0 keyIncr=4 keyDecr=3" );
-	//	mParams.addParam( "BlobMin", &mBlobMin, "min=1.0 max=500.0 step=5.0 keyIncr=6 keyDecr=5" );
-	//	mParams.addParam( "BlobMax", &mBlobMax, "min=1.0 max=500.0 step=5.0 keyIncr=8 keyDecr=7" );
-	//	mParams.addParam( "mColorMode", &mColorMode, "min=0.0 max=2.0 step=1.0 keyIncr=2 keyDecr=1");
+	/*
 	mParams.addParam( "minColorThresh", &minColorThresh, "min=0.0 max=180.0 step=5.0 keyIncr=2 keyDecr=1");
 	mParams.addParam( "maxColorThresh", &maxColorThresh, "min=0.0 max=180.0 step=5.0 keyIncr=0 keyDecr=9");
 	mParams.addParam( "minSaturation", &minSaturation, "min=0.0 max=255.0 step=5.0 keyIncr=w keyDecr=s");
 	mParams.addParam( "minVal", &minVal, "min=0.0 max=255.0 step=5.0 keyIncr=f keyDecr=v");	
+	*/
+	mParams.addParam( "xCalibration", &xCalibration, "min=-100.0 max=100.0 step=1.0 keyIncr=x keyDecr=z");	
+	mParams.addParam( "yCalibration", &yCalibration, "min=-100.0 max=100.0 step=1.0 keyIncr=y keyDecr=t");	
+	mParams.addParam( "depthCalibration", &depthCalibration, "min=-100.0 max=100.0 step=0.1 keyIncr=d keyDecr=s");	
+	mParams.addParam( "scaleCalibration", &scaleCalibration, "min=0.0 max=2.0 step=0.01 keyIncr=k keyDecr=j");		
+	mParams.addParam( "pointerX", &pointerX, "min=0.0 max=700.0 step=5.0 keyIncr=2 keyDecr=1");		
+	mParams.addParam( "pointerY", &pointerY, "min=0.0 max=700.0 step=5.0 keyIncr=0 keyDecr=9");		
 	//settings->setWindowSize( 640, 480 );
 }
 
@@ -176,184 +192,40 @@ gl::Texture kinectBasicApp::threshholdTexture(ImageSourceRef depthImage){
 void kinectBasicApp::update()
 {	
 	if( mKinect.checkNewDepthFrame() ){
-		//		mDepthTexture = mKinect.getDepthImage();
+		mTextureTopLeft = mKinect.getDepthImage();
+		//mTextureTopLeft = this->threshholdTexture(mKinect.getDepthImage());
 		
-		//		mTextureBottomRight = this->threshholdTexture(mKinect.getDepthImage());
-		
-		//	gl::Texture
-		
-		/*		
-		 ImageSourceRef depthImage = mKinect.getDepthImage();
-		 if(depthImage){
-		 }else{
-		 console() << "no depthImage" << std::endl;
-		 }
-		 
-		 cv::Mat input(toOcv(Channel8u(depthImage))), blurred, thresholded, thresholded2, output;
-		 
-		 cv::blur(input, blurred, cv::Size(10,10));
-		 
-		 float threshF = 70.0f;
-		 
-		 // make two thresholded images one to display and one
-		 // to pass to find contours since its process alters the image
-		 cv::threshold( blurred, thresholded, threshF, 255, CV_THRESH_BINARY);
-		 cv::threshold( blurred, thresholded2, threshF, 255, CV_THRESH_BINARY);
-		 
-		 mDepthTexture = gl::Texture(fromOcv(thresholded)); //gl::Texture(fromOcv(output));
-		 */
-		
+		cv::Mat input(toOcv(Channel8u(mKinect.getDepthImage()))), blurred;
+		cv::blur(input, blurred, cv::Size(mBlur, mBlur));
+		Channel8u blurry(fromOcv(blurred));
+
+		int depthTotal = 0;
+		int halfBlur = (mBlur * 0.5);
+		// NOTE: Getting the average depth over the area of blur squared.
+		// This might not be necessary since the data is already blurred
+		for(int x=pointerX-halfBlur;x<pointerX+halfBlur;x++){
+			for(int y=pointerY-halfBlur;y<pointerX+halfBlur;y++){
+				depthTotal += *blurry.getData(Vec2i(pointerX, pointerY));
+			}
+		}
+		pointerDepth = depthTotal / (mBlur * mBlur);
+
 	}
 	
 	if( mKinect.checkNewVideoFrame() ){
+
 		Surface rgbImage(mKinect.getVideoImage());
-		//		mColorTexture = gl::Texture(rgbImage); //mKinect.getVideoImage();
 		
-		//		mColorTexture = this->threshholdTexture(mKinect.getVideoImage());
+		mTextureBottomLeft = rgbImage;
+
+		Surface scaledRGB(int(640.0 * scaleCalibration), int(480.0 * scaleCalibration), false);
+		ci::ip::resize(rgbImage, &scaledRGB);
 		
-		// TODO / NOTE: Do we need to convert between the Surface and the glTexture here?
-		// mColorTexture = this->colorThreshholdChannels(mKinect.getVideoImage());
-		
-		
-		//Surface newSurface(rgbImage.getWidth(), rgbImage.getHeight(), true);
-		//Channel rChannel = this->thresholdChannel(rgbImage.getChannelRed());
-		//Channel gChannel = this->thresholdChannel(rgbImage.getChannelGreen());
-		//Channel bChannel = this->thresholdChannel(rgbImage.getChannelBlue());
+		mTextureTopRight = scaledRGB;
+				
 		/*
-		 mTexR = gl::Texture(this->thresholdChannel(rgbImage.getChannelRed()));
-		 mTexG = gl::Texture(this->thresholdChannel(rgbImage.getChannelGreen()));
-		 mTexB = gl::Texture(this->thresholdChannel(rgbImage.getChannelBlue()));
-		 */
-		
-		//		mTexR = gl::Texture(rgbImage.getChannelRed());
-		
-		/*
-		 Surface rSurface(rgbImage.getWidth(), rgbImage.getHeight(), true);//(rgbImage.getChannelRed());
-		 Channel rChannel = rgbImage.getChannelRed();
-		 Channel::Iter chIter = rChannel.getIter(); // using const because we're not modifying it
-		 Surface::Iter surIter( rSurface.getIter() ); // not using const because we are modifying it
-		 while( chIter.line() && surIter.line() ) { // line by line
-		 while( chIter.pixel() && surIter.pixel() ) { // pixel by pixel
-		 int chValue = chIter.v();
-		 surIter.r() = chValue;
-		 surIter.g() = chValue;
-		 surIter.b() = chValue;
-		 surIter.a() = 255.0;
-		 }
-		 }
-		 
-		 if(true){
-		 //			mTexR = gl::Texture(rSurface);
-		 cv::Mat input(toOcv(Channel(rSurface))), blurred, thresholded, thresholded2, output;
-		 // NOTE: Stretches out image
-		 //			cv::Mat input(toOcv(rgbImage.getChannelRed())), blurred, thresholded, thresholded2, output;
-		 cv::blur(input, blurred, cv::Size(mBlur, mBlur));
-		 cv::threshold( blurred, thresholded2, mThreshold, 255, CV_THRESH_BINARY);
-		 cv::cvtColor(thresholded2, output, CV_GRAY2RGB );
-		 mTexR = gl::Texture(fromOcv(output));
-		 }else{
-		 cv::Mat input(toOcv(rSurface)), blurred, thresholded, thresholded2, output;
-		 cv::blur(input, blurred, cv::Size(mBlur, mBlur));
-		 
-		 //		cv::threshold( blurred, thresholded, mThreshold, 255, CV_THRESH_BINARY);
-		 cv::threshold( blurred, thresholded2, mThreshold, 255, CV_THRESH_BINARY);
-		 cv::cvtColor(thresholded2, output, CV_GRAY2RGB );
-		 */ 
-		/*
-		 vector< vector<cv::Point> > contours;
-		 cv::findContours(thresholded, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-		 cv::cvtColor(thresholded2, output, CV_GRAY2RGB );
-		 
-		 for (vector<vector<cv::Point> >::iterator it=contours.begin() ; it < contours.end(); it++ ){
-		 cv::Point2f center;
-		 float radius;
-		 vector<cv::Point> pts = *it;
-		 cv::Mat pointsMatrix = cv::Mat(pts);
-		 cv::minEnclosingCircle(pointsMatrix, center, radius);
-		 cv::Scalar color( 0, 255, 0 );
-		 if (radius > mBlobMin && radius < mBlobMax) {
-		 cv::circle(output, center, radius, color);
-		 }
-		 }
-		 
-		 return gl::Texture(fromOcv(output));
-		 */
-		//mTexR = gl::Texture(fromOcv(output));
-		//}
-		
-		//		Surface redSurface = this->surfaceFromChannel(rgbImage, 0);
-		/*
-		 mTexR = this->threshholdTextureFromChannelSurface(this->surfaceFromChannel(rgbImage, 0));
-		 mTexG = this->threshholdTextureFromChannelSurface(this->surfaceFromChannel(rgbImage, 1));
-		 mTexB = this->threshholdTextureFromChannelSurface(this->surfaceFromChannel(rgbImage, 2));
-		 */
-		
-		// Threshold Channel overlap
-		/*		
-		 // 1 Get surfaces for each channel
-		 Surface rSurface = this->surfaceFromChannel(rgbImage, 0);
-		 Surface gSurface = this->surfaceFromChannel(rgbImage, 1);
-		 Surface bSurface = this->surfaceFromChannel(rgbImage, 2);
-		 
-		 // threshhold each surface
-		 Surface rThresh = this->threshholdSurfaceFromChannelSurface(rSurface);
-		 Surface gThresh = this->threshholdSurfaceFromChannelSurface(gSurface);
-		 Surface bThresh = this->threshholdSurfaceFromChannelSurface(bSurface);
-		 
-		 // recombine them into 1 surface
-		 Surface rgbThresh(640, 480, true);
-		 //		Channel::Iter chIter = rChannel.getIter(); // using const because we're not modifying it
-		 Surface::Iter surIter( rgbThresh.getIter() ); // not using const because we are modifying it
-		 while( surIter.line() ) { // line by line
-		 while( surIter.pixel() ) { // pixel by pixel
-		 int x = surIter.x();
-		 int y = surIter.y();
-		 surIter.r() = *rThresh.getDataRed(Vec2i(x,y)); //.getChannelRed().getValue(Vec2i(x,y));//chValue;
-		 surIter.g() = *gThresh.getDataGreen(Vec2i(x,y)); //.getChannelGreen().getValue(Vec2i(x,y));//gThresh.getDataRed(Vec2i(x,y));//chValue;
-		 surIter.b() = *bThresh.getDataBlue(Vec2i(x,y)); //.getChannelBlue().getValue(Vec2i(x,y));//*bThresh.getDataRed(Vec2i(x,y));//chValue;
-		 surIter.a() = 255; //255.0;
-		 }
-		 }
-		 
-		 mRGBThreshTexture = gl::Texture(rgbThresh);
-		 */
-		
 		Surface redImage(640, 480, false), greenImage(640, 480, false), blueImage(640, 480, false);
-		
-		// Hand rolled color detection
-		/*
-		 Surface::ConstIter rgbIter = rgbImage.getIter();
-		 while(rgbIter.line()){
-		 while (rgbIter.pixel()) {
-		 int x = rgbIter.x();
-		 int y = rgbIter.y();
-		 Vec2i pixPos(x,y);
-		 ColorA8u rgbPixel = rgbImage.getPixel(pixPos);
-		 float normalRgb = rgbPixel.r + rgbPixel.g + rgbPixel.b;
-		 float normalR = rgbPixel.r / normalRgb;
-		 float normalG = rgbPixel.g / normalRgb;
-		 float normalB = rgbPixel.b / normalRgb;
-		 
-		 // Check for color rangeS <<<<
-		 if(normalR > 0.5){
-		 redImage.setPixel(pixPos, ColorA8u(255,0,0));
-		 }else{
-		 redImage.setPixel(pixPos, ColorA8u(0,0,0));
-		 }
-		 if(normalG > 0.5){
-		 greenImage.setPixel(pixPos, ColorA8u(0,255,0));
-		 }else{
-		 greenImage.setPixel(pixPos, ColorA8u(0,0,0));
-		 }
-		 if(normalB > 0.5){
-		 blueImage.setPixel(pixPos, ColorA8u(0,0,255));
-		 }else{
-		 blueImage.setPixel(pixPos, ColorA8u(0,0,0));
-		 }
-		 }
-		 }
-		 */
-		
+
 		// HSV Detection
 		cv::Mat input(toOcv(rgbImage)), img_hsv_;
 		cv::cvtColor(input, img_hsv_, CV_RGB2HSV);
@@ -405,114 +277,7 @@ void kinectBasicApp::update()
 		// minVal		  = 65
 		
 		mTextureTopLeft = this->threshholdTexture(output);
-		//		mTextureTopRight = greenImage;
-		//		mTextureBottomLeft = blueImage;
-		mTextureBottomRight = rgbImage;
-		
-		/*		
-		 // Color range isolation
-		 
-		 // 1) Convert Color to HSV
-		 cv::Mat input(toOcv(rgbImage)), img_hsv_;
-		 cv::cvtColor(input, img_hsv_, CV_RGB2HSV);
-		 Surface hsvImage(fromOcv(img_hsv_)), hueImage(640, 480, false);
-		 
-		 
-		 Surface::ConstIter hsvIter = hsvImage.getIter();
-		 Surface::Iter hueIter = hueImage.getIter();
-		 while(hsvIter.line()){
-		 while (hsvIter.pixel()) {
-		 int x = hsvIter.x();
-		 int y = hsvIter.y();
-		 ColorA8u hsvPix = hsvImage.getPixel(Vec2i(x,y));
-		 int h = 0;
-		 // r == saturation // r > 100 only shows saturated red and it's not affected by shadow
-		 // g == color
-		 // b == brightness?
-		 if((hsvPix.g > 230 || hsvPix.g < 30) && hsvPix.r > 100) h = 255;
-		 hueImage.setPixel(Vec2i(x,y), ColorA8u(h,h,h));
-		 }
-		 }
-		 */ 
-		/*
-		 cv::Mat hueInput(toOcv(hueImage)), blurred, thresholded, output;
-		 cv::blur(hueInput, blurred, cv::Size(10, 10));
-		 cv::threshold(blurred, thresholded, mThreshold, 255, CV_THRESH_BINARY);
-		 cv::cvtColor(thresholded, output, CV_GRAY2RGB );
-		 mRGBThreshTexture = gl::Texture(fromOcv(output));
-		 */
-		
-		//		mRGBThreshTexture = this->threshholdTexture(hueImage);
-		
-		//		Surface hsvImage(fromOcv(img_hsv_)), hueImage(640, 480, false);
-		
-		/*
-		 Surface::ConstIter hsvIter = hsvImage.getIter();
-		 Surface::Iter hueIter = hueImage.getIter();
-		 while( hsvIter.line() && hueIter.line() ) { // line by line
-		 while( hsvIter.pixel() && hueIter.pixel()) { // pixel by pixel
-		 int x = hsvIter.x();
-		 int y = hsvIter.y();
-		 Vec2i loc(x,y);				
-		 int h = *hsvImage.getDataRed(loc);// This really seems like brightness
-		 int s = *hsvImage.getDataGreen(loc); // Brightness?
-		 int v = *hsvImage.getDataBlue(loc);				
-		 //				bool show = v < mVthresh && h < mHthresh && s < mSthresh;
-		 bool show = h < 60 || h > 200;
-		 hueIter.r() = show ? 255 : 0; //*rThresh.getDataRed(Vec2i(x,y)); //.getChannelRed().getValue(Vec2i(x,y));//chValue;
-		 hueIter.g() = show ? 255 : 0; //*gThresh.getDataGreen(Vec2i(x,y)); //.getChannelGreen().getValue(Vec2i(x,y));//gThresh.getDataRed(Vec2i(x,y));//chValue;
-		 hueIter.b() = show ? 255 : 0; //*bThresh.getDataBlue(Vec2i(x,y)); //.getChannelBlue().getValue(Vec2i(x,y));//*bThresh.getDataRed(Vec2i(x,y));//chValue;
-		 //				hueIter.a() = 255; //255.0;
-		 }
-		 }
-		 
-		 mRGBThreshTexture = hueImage;
-		 */
-		
-		//		cv::cvtColor(input, img_hsv_, CV_RGBA2RGB);
-		//Channel8u hueChannel(rows, cols);		
-		
-		//console() << "cols: " << cols << " rows: " << rows << std::endl;
-		
-		//		cv::Mat img_out_(rows, cols, CV_RGB);
-		
-		// Zero Matrices
-		/*		cv::Mat img_out_ = input.clone();
-		 cv::Mat img_hue_ = cv::Mat::zeros(img_hsv_.cols, img_hsv_.rows, CV_8U);
-		 cv::Mat img_sat_ = cv::Mat::zeros(img_hsv_.cols, img_hsv_.rows, CV_8U);
-		 cv::Mat img_bin_ = cv::Mat::zeros(img_hsv_.cols, img_hsv_.rows, CV_8U);
-		 int from_to[] = {0,0, 1,1};
-		 cv::Mat img_split[] = { img_hue_, img_sat_ };
-		 cv::mixChannels(&img_hsv_, 3, img_split, 2, from_to, 2);
-		 */		
-		
-		//		console() << "img_hsv_.cols: " << img_hsv_.cols << " img_hsv_.rows: " << img_hsv_.rows << std::endl;
-		//		console() << "hueImage.cols: " << hueImage.getWidth() << " hueImage.rows: " << hueImage.getHeight() << std::endl;
-		// 2) Isolate pixels that have an H within range
-		
-		
-		
-		/*		// Display Input image
-		 cv::imshow ("input", img_in_);
-		 // Display Binary Image
-		 cv::imshow ("binary image", img_bin_);
-		 // Display segmented image
-		 cv::imshow ("segmented output", img_out_);
-		 */
-		//		mRGBThreshTexture = gl::Texture(fromOcv(img_bin_));
-		//		mRGBThreshTexture = hueImage;
-		//		mRGBThreshTexture = gl::Texture(Channel(fromOcv(img_bin_)));
-		
-		//		mRGBThreshTexture = gl::Texture(fromOcv(img_bin_));
-		//		mRGBThreshTexture = gl::Texture(hueChannel);
-		//		console() << "mRGBThreshTexture: " << mRGBThreshTexture << std::endl;
-		
-		// 3) Create new channel that only shows those pixels
-		// ... test 
-		// 4) Blur
-		// 5) Threshold
-		// 6) Blob detect
-		
+		*/		
 	}
 	
 	//	console() << "Accel: " << mKinect.getAccel() << std::endl;
@@ -578,15 +343,39 @@ void kinectBasicApp::draw()
 	gl::clear( Color( 0, 0, 0 ) ); 
 	gl::setMatricesWindow( getWindowWidth(), getWindowHeight() );
 	
+	if( mTextureTopRight )
+		gl::draw( mTextureTopRight, Vec2i( 640 + xCalibration, 0 + yCalibration) );
 	if( mTextureTopLeft )
 		gl::draw( mTextureTopLeft, Vec2i(0, 0) );
-	if( mTextureTopRight )
-		gl::draw( mTextureTopRight, Vec2i( 640, 0 ) );
 	if( mTextureBottomLeft )
 		gl::draw( mTextureBottomLeft, Vec2i( 0, 480 ) );
 	if( mTextureBottomRight )
 		gl::draw( mTextureBottomRight, Vec2i( 640, 480 ) );
 	
+	
+	// xCalibration, yCalibration, depthCalibration;
+	
+
+	//float xPos, yPos = 0.0;
+	
+	/*
+	float scaleCalibratedXOff = (640 - (640 * scaleCalibration)) * 0.5;
+	float scaleCalibratedYOff = (480 - (480 * scaleCalibration)) * 0.5;
+	*/
+	
+	float calibratedX = ((xCalibration / scaleCalibration) * -1) + (pointerX / scaleCalibration);
+	float calibratedY = ((yCalibration / scaleCalibration) * -1) + (pointerY / scaleCalibration);
+	
+	// The closer the point is to the camera, the more the X should be negatively offset, 
+	// since the lenses are offset on the xAxis.
+	// NOTE: depthOffsetMultiplier is just a shot in the dark.
+	// Roughly, 255 (white) * 0.05 = 12.75 pixels
+	float depthOffsetMultiplier = 0.05;
+	calibratedX -= (pointerDepth * depthOffsetMultiplier);
+	
+	gl::drawSolidCircle(Vec2f(pointerX, pointerY), 10.0);
+	gl::drawSolidCircle(Vec2f(calibratedX, 480+calibratedY), 10.0);
+		
 	params::InterfaceGl::draw();
 	
 }
