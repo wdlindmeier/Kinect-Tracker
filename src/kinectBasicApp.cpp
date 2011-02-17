@@ -7,6 +7,9 @@
 #include "cinder/Rand.h"
 #include "cinder/params/Params.h"
 #include "cinder/ip/Resize.h"
+#include "cinder/audio/Output.h"
+#include "cinder/audio/Callback.h"
+#include "cinder/CinderMath.h"
 
 #include "Kinect.h"
 #include "CinderOpenCV.h"
@@ -42,6 +45,15 @@ public:
 	int					mColorMode, minSaturation, minVal;
 	uint8_t pointerDepth;
 	params::InterfaceGl	mParams;
+	
+	// Audio
+	void sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, audio::Buffer32f *ioBuffer );
+
+	float mFreqTarget;
+	float mPhase;
+	float mPhaseAdjust;
+	float mMaxFreq;
+	
 };
 
 void kinectBasicApp::prepareSettings( Settings* settings )
@@ -55,6 +67,25 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	mVthresh = 200;
 	mHthresh = 500;
 	mSthresh = 500;
+	
+	// Color tracking
+	
+	// Spectrum maxes out at 180
+	// SO, all spectrum colors are halved
+	// Color breakdown (approx):
+	
+	// RED:			100-140
+	// PURPLE/BLUE:	150-180 
+	// CYAN:		0-20
+	// GREEN:		20-120
+	// YELLOW:		100-125
+	// ORANGE:		120-140
+		
+	// TMP
+	minColorThresh = 100;
+	maxColorThresh = 165;
+	minSaturation  = 180;
+	minVal		   = 65; // Val == Darkness	
 	
 //	xCalibration, yCalibration, depthCalibration = 0.0;
 //	scaleCalibration = 1.0;
@@ -88,14 +119,35 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 
 void kinectBasicApp::setup()
 {
-	console() << "There are " << Kinect::getNumDevices() << " Kinects connected." << std::endl;
+	//console() << "There are " << Kinect::getNumDevices() << " Kinects connected." << std::endl;
 	
 	mKinect = Kinect( Kinect::Device() ); // the default Device implies the first Kinect connected
+	
+	
+	mMaxFreq = 1000.0f;
+	mFreqTarget = 0.0f;
+	mPhase = 0.0f;
+	mPhaseAdjust = 0.0f;
+	
+	audio::Output::play( audio::createCallback( this, &kinectBasicApp::sineWave ) );
+	
 }
 
 void kinectBasicApp::mouseDown( MouseEvent event )
 {
 	mKinect.setLedColor( Kinect::LED_RED );
+}
+
+void kinectBasicApp::sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, audio::Buffer32f *ioBuffer ) {
+	mPhaseAdjust = mPhaseAdjust * 0.95f + ( mFreqTarget / 44100.0f ) * 0.05f;
+	for( int  i = 0; i < ioSampleCount; i++ ) {
+		mPhase += mPhaseAdjust;
+		mPhase = mPhase - math<float>::floor( mPhase );
+		float val = math<float>::sin( mPhase * 2.0f * M_PI );
+		
+		ioBuffer->mData[i*ioBuffer->mNumberChannels] = val;
+		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = val;
+	}
 }
 
 /*
@@ -208,7 +260,11 @@ void kinectBasicApp::update()
 				depthTotal += *blurry.getData(Vec2i(pointerX, pointerY));
 			}
 		}
+		
 		pointerDepth = depthTotal / (mBlur * mBlur);
+		
+		// Set the tone according to the pointer depth
+		mFreqTarget = math<float>::clamp( pointerDepth / 255.0 * mMaxFreq, 0.0, mMaxFreq );
 
 	}
 	
@@ -223,14 +279,14 @@ void kinectBasicApp::update()
 		
 		mTextureTopRight = scaledRGB;
 				
-		/*
+
 		Surface redImage(640, 480, false), greenImage(640, 480, false), blueImage(640, 480, false);
 
 		// HSV Detection
 		cv::Mat input(toOcv(rgbImage)), img_hsv_;
 		cv::cvtColor(input, img_hsv_, CV_RGB2HSV);
 		//		cv::cvtColor(input, img_hsv_, CV_RGB2HLS);
-		Surface output(img_hsv_.rows, img_hsv_.cols, false);
+		Surface output(img_hsv_.cols, img_hsv_.rows, false);
 		
 		cv::Mat img_hue_, img_sat_, img_val_;
 		img_hue_ = cv::Mat::zeros(img_hsv_.rows, img_hsv_.cols, CV_8UC1);
@@ -252,9 +308,9 @@ void kinectBasicApp::update()
 				   img_sat_.at<uchar>(i,j) > minSaturation && 
 				   img_val_.at<uchar>(i,j) > minVal ) {
 					//img_bin_.at(i,j) = 255;
-					output.setPixel(Vec2i(i,j), Color8u(255,255,255));
+					output.setPixel(Vec2i(j,i), Color8u(255,255,255));
 				} else {
-					output.setPixel(Vec2i(i,j), Color8u(0,0,0));
+					output.setPixel(Vec2i(j,i), Color8u(0,0,0));
 				}
 			}
 		}
@@ -276,8 +332,8 @@ void kinectBasicApp::update()
 		// minSaturation  = 180
 		// minVal		  = 65
 		
-		mTextureTopLeft = this->threshholdTexture(output);
-		*/		
+		mTextureBottomRight = this->threshholdTexture(output);
+
 	}
 	
 	//	console() << "Accel: " << mKinect.getAccel() << std::endl;
