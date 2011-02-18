@@ -81,11 +81,11 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	// YELLOW:		100-125
 	// ORANGE:		120-140
 		
-	// TMP
+	// Orange Ping Pong Ball
 	minColorThresh = 100;
-	maxColorThresh = 165;
-	minSaturation  = 180;
-	minVal		   = 65; // Val == Darkness	
+	maxColorThresh = 130;
+	minSaturation  = 170;
+	minVal		   = 180; // Val == Darkness	
 	
 //	xCalibration, yCalibration, depthCalibration = 0.0;
 //	scaleCalibration = 1.0;
@@ -93,27 +93,29 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	xCalibration = -22.0;
 	yCalibration = -34.0;
 	scaleCalibration = 1.08;	
-	pointerX = 100.0;
-	pointerY = 100.0;
+	pointerX = -100; //100.0;
+	pointerY = -100; //100.0;
 	
 	settings->setWindowSize( 1280, 800); //960 );
 	mThreshold = 70.0f;
 	mBlur = 10.0;
-	mBlobMin = 40.0;
-	mBlobMax = 200.0;
+	mBlobMin = 5.0;
+	mBlobMax = 100.0;
 	mParams = params::InterfaceGl("WakaWaka", Vec2i(200,100));
-	/*
+	
 	mParams.addParam( "minColorThresh", &minColorThresh, "min=0.0 max=180.0 step=5.0 keyIncr=2 keyDecr=1");
 	mParams.addParam( "maxColorThresh", &maxColorThresh, "min=0.0 max=180.0 step=5.0 keyIncr=0 keyDecr=9");
 	mParams.addParam( "minSaturation", &minSaturation, "min=0.0 max=255.0 step=5.0 keyIncr=w keyDecr=s");
 	mParams.addParam( "minVal", &minVal, "min=0.0 max=255.0 step=5.0 keyIncr=f keyDecr=v");	
-	*/
+	
+	/*
 	mParams.addParam( "xCalibration", &xCalibration, "min=-100.0 max=100.0 step=1.0 keyIncr=x keyDecr=z");	
 	mParams.addParam( "yCalibration", &yCalibration, "min=-100.0 max=100.0 step=1.0 keyIncr=y keyDecr=t");	
 	mParams.addParam( "depthCalibration", &depthCalibration, "min=-100.0 max=100.0 step=0.1 keyIncr=d keyDecr=s");	
 	mParams.addParam( "scaleCalibration", &scaleCalibration, "min=0.0 max=2.0 step=0.01 keyIncr=k keyDecr=j");		
 	mParams.addParam( "pointerX", &pointerX, "min=0.0 max=700.0 step=5.0 keyIncr=2 keyDecr=1");		
 	mParams.addParam( "pointerY", &pointerY, "min=0.0 max=700.0 step=5.0 keyIncr=0 keyDecr=9");		
+	*/
 	//settings->setWindowSize( 640, 480 );
 }
 
@@ -232,8 +234,14 @@ gl::Texture kinectBasicApp::threshholdTexture(ImageSourceRef depthImage){
 		cv::Mat pointsMatrix = cv::Mat(pts);
 		cv::minEnclosingCircle(pointsMatrix, center, radius);
 		cv::Scalar color( 0, 255, 0 );
+//		console() << "radius: " << radius;
 		if (radius > mBlobMin && radius < mBlobMax) {
 			cv::circle(output, center, radius, color);
+			
+			// Lets point to the first/last one we find
+			pointerX = math<int>::clamp(center.x + xCalibration, 0, 640); //math<int>::clamp( (center.x + (xCalibration / scaleCalibration)) * scaleCalibration, 0.0, 640 );
+			pointerY = math<int>::clamp(center.y + yCalibration, 0, 480); // math<int>::clamp( (center.y + (yCalibration / scaleCalibration)) * scaleCalibration, 0.0, 480 );
+//			console() << "x " << (center.x + ((xCalibration / scaleCalibration)) * scaleCalibration) << " y " << ((center.y + (yCalibration / scaleCalibration)) * scaleCalibration);
 		}
 	}
 	
@@ -278,15 +286,17 @@ void kinectBasicApp::update()
 		ci::ip::resize(rgbImage, &scaledRGB);
 		
 		mTextureTopRight = scaledRGB;
-				
-
-		Surface redImage(640, 480, false), greenImage(640, 480, false), blueImage(640, 480, false);
-
+		
 		// HSV Detection
-		cv::Mat input(toOcv(rgbImage)), img_hsv_;
+//		cv::Mat input(toOcv(rgbImage)), img_hsv_;
+
+		// NOTE: Using the resized image to track the color
+		cv::Mat input(toOcv(scaledRGB)), img_hsv_;
+		
 		cv::cvtColor(input, img_hsv_, CV_RGB2HSV);
-		//		cv::cvtColor(input, img_hsv_, CV_RGB2HLS);
+
 		Surface output(img_hsv_.cols, img_hsv_.rows, false);
+		// cv::Mat output(640, 480, CV_8UC3);
 		
 		cv::Mat img_hue_, img_sat_, img_val_;
 		img_hue_ = cv::Mat::zeros(img_hsv_.rows, img_hsv_.cols, CV_8UC1);
@@ -307,10 +317,19 @@ void kinectBasicApp::update()
 				   img_hue_.at<uchar>(i,j) < maxColorThresh &&
 				   img_sat_.at<uchar>(i,j) > minSaturation && 
 				   img_val_.at<uchar>(i,j) > minVal ) {
-					//img_bin_.at(i,j) = 255;
 					output.setPixel(Vec2i(j,i), Color8u(255,255,255));
+					/*
+					output.at<uchar>(i,j*3+0) = 255;
+					output.at<uchar>(i,j*3+1) = 255;
+					output.at<uchar>(i,j*3+2) = 255;
+					 */
 				} else {
 					output.setPixel(Vec2i(j,i), Color8u(0,0,0));
+					/*
+					output.at<uchar>(i,j*3+0) = 0;
+					output.at<uchar>(i,j*3+1) = 0;
+					output.at<uchar>(i,j*3+2) = 0;
+					*/ 
 				}
 			}
 		}
@@ -331,7 +350,10 @@ void kinectBasicApp::update()
 		// maxColorThresh = 145
 		// minSaturation  = 180
 		// minVal		  = 65
+
+		//cv::Mat input(toOcv(Channel8u(depthImage))), blurred, thresholded, thresholded2, output;
 		
+		// mTextureBottomRight = this->threshholdTexture(fromOcv(output));
 		mTextureBottomRight = this->threshholdTexture(output);
 
 	}
@@ -408,17 +430,9 @@ void kinectBasicApp::draw()
 	if( mTextureBottomRight )
 		gl::draw( mTextureBottomRight, Vec2i( 640, 480 ) );
 	
-	
-	// xCalibration, yCalibration, depthCalibration;
-	
 
-	//float xPos, yPos = 0.0;
-	
-	/*
-	float scaleCalibratedXOff = (640 - (640 * scaleCalibration)) * 0.5;
-	float scaleCalibratedYOff = (480 - (480 * scaleCalibration)) * 0.5;
-	*/
-	
+	// Translate the point point FROM the depth image TO the color image
+	 
 	float calibratedX = ((xCalibration / scaleCalibration) * -1) + (pointerX / scaleCalibration);
 	float calibratedY = ((yCalibration / scaleCalibration) * -1) + (pointerY / scaleCalibration);
 	
@@ -428,9 +442,9 @@ void kinectBasicApp::draw()
 	// Roughly, 255 (white) * 0.05 = 12.75 pixels
 	float depthOffsetMultiplier = 0.05;
 	calibratedX -= (pointerDepth * depthOffsetMultiplier);
-	
+
 	gl::drawSolidCircle(Vec2f(pointerX, pointerY), 10.0);
-	gl::drawSolidCircle(Vec2f(calibratedX, 480+calibratedY), 10.0);
+	gl::drawSolidCircle(Vec2f(calibratedX, 480+calibratedY), 10.0);	 
 		
 	params::InterfaceGl::draw();
 	
