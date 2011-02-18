@@ -43,6 +43,7 @@ public:
 	int					mBlur, mVthresh, mHthresh, mSthresh;
 	int					maxColorThresh, minColorThresh;
 	int					mColorMode, minSaturation, minVal;
+	int					depthPointerX, depthPointerY;
 	uint8_t pointerDepth;
 	params::InterfaceGl	mParams;
 	
@@ -95,6 +96,8 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	scaleCalibration = 1.08;	
 	pointerX = -100; //100.0;
 	pointerY = -100; //100.0;
+	depthPointerX = -100;
+	depthPointerY = -100;
 	
 	settings->setWindowSize( 1280, 800); //960 );
 	mThreshold = 70.0f;
@@ -239,8 +242,16 @@ gl::Texture kinectBasicApp::threshholdTexture(ImageSourceRef depthImage){
 			cv::circle(output, center, radius, color);
 			
 			// Lets point to the first/last one we find
+			// NOTE: Adding the radius to account for the camera parallax offset.
+			// The closer the ball is, the more pronounced the offset is so we can use 
+			// the radius as a rough guide
 			pointerX = math<int>::clamp(center.x + xCalibration, 0, 640); //math<int>::clamp( (center.x + (xCalibration / scaleCalibration)) * scaleCalibration, 0.0, 640 );
 			pointerY = math<int>::clamp(center.y + yCalibration, 0, 480); // math<int>::clamp( (center.y + (yCalibration / scaleCalibration)) * scaleCalibration, 0.0, 480 );
+			
+			depthCalibration = (radius * 0.75);
+			depthPointerX = pointerX + depthCalibration;
+			depthPointerY = pointerY;
+
 //			console() << "x " << (center.x + ((xCalibration / scaleCalibration)) * scaleCalibration) << " y " << ((center.y + (yCalibration / scaleCalibration)) * scaleCalibration);
 		}
 	}
@@ -263,17 +274,32 @@ void kinectBasicApp::update()
 		int halfBlur = (mBlur * 0.5);
 		// NOTE: Getting the average depth over the area of blur squared.
 		// This might not be necessary since the data is already blurred
+		/*
 		for(int x=pointerX-halfBlur;x<pointerX+halfBlur;x++){
 			for(int y=pointerY-halfBlur;y<pointerX+halfBlur;y++){
 				depthTotal += *blurry.getData(Vec2i(pointerX, pointerY));
 			}
 		}
-		
-		pointerDepth = depthTotal / (mBlur * mBlur);
-		
-		// Set the tone according to the pointer depth
-		mFreqTarget = math<float>::clamp( pointerDepth / 255.0 * mMaxFreq, 0.0, mMaxFreq );
 
+		pointerDepth = depthTotal / (mBlur * mBlur);
+		*/
+
+		if(depthPointerX >= 0 && depthPointerX < blurry.getSize().x &&
+		   depthPointerY >= 0 && depthPointerY < blurry.getSize().y){
+
+			pointerDepth = *blurry.getData(Vec2i(depthPointerX, depthPointerY));			
+			// Set the tone according to the pointer depth
+			mFreqTarget = math<float>::clamp( pointerDepth / 255.0 * mMaxFreq, 0.0, mMaxFreq );
+			
+		}else{
+			
+			mFreqTarget = 0.0;
+			
+		}
+
+//		console() << "pointerX: " << pointerX << " pointerY: " << pointerY << std::endl;		
+//		console() << "pointerDepth: " << int(pointerDepth) << " mFreqTarget: " << mFreqTarget << std::endl;
+		
 	}
 	
 	if( mKinect.checkNewVideoFrame() ){
@@ -430,8 +456,8 @@ void kinectBasicApp::draw()
 	if( mTextureBottomRight )
 		gl::draw( mTextureBottomRight, Vec2i( 640, 480 ) );
 	
-
-	// Translate the point point FROM the depth image TO the color image
+/*
+	// Translate the point point FROM the scaled image TO the color image
 	 
 	float calibratedX = ((xCalibration / scaleCalibration) * -1) + (pointerX / scaleCalibration);
 	float calibratedY = ((yCalibration / scaleCalibration) * -1) + (pointerY / scaleCalibration);
@@ -440,11 +466,12 @@ void kinectBasicApp::draw()
 	// since the lenses are offset on the xAxis.
 	// NOTE: depthOffsetMultiplier is just a shot in the dark.
 	// Roughly, 255 (white) * 0.05 = 12.75 pixels
-	float depthOffsetMultiplier = 0.05;
-	calibratedX -= (pointerDepth * depthOffsetMultiplier);
+	// float depthOffsetMultiplier = 0.05;
+	// calibratedX -= (pointerDepth * depthOffsetMultiplier);
+*/	
 
-	gl::drawSolidCircle(Vec2f(pointerX, pointerY), 10.0);
-	gl::drawSolidCircle(Vec2f(calibratedX, 480+calibratedY), 10.0);	 
+	gl::drawSolidCircle(Vec2f(640+pointerX, pointerY), 10.0);
+	gl::drawSolidCircle(Vec2f(depthPointerX, depthPointerY), 10.0);	 
 		
 	params::InterfaceGl::draw();
 	
