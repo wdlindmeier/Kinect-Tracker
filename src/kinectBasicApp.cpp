@@ -17,6 +17,8 @@
 
 #include "ParticleEmitter.h"
 
+#define TRACK_COLOR	1
+
 using namespace ci;
 using namespace ci::app;
 using namespace std;
@@ -123,6 +125,15 @@ void kinectBasicApp::setup()
 	
 	// Audio reactive
 //	audio::Output::play( audio::createCallback( this, &kinectBasicApp::sineWave ) );
+
+#if TRACK_COLOR == 0	
+	float density = 0.2;
+	for(int x=0;x<(640*density);x++){
+		for(int y=0;y<(480*density);y++){
+			mParticleEmitter.addParticles(1, Vec2i((x/density), (y/density)), Vec2f::zero());
+		}
+	}
+#endif
 	
 }
 
@@ -242,6 +253,8 @@ void kinectBasicApp::update()
 
 		mTextureTopRight = mRGBSurface;
 		
+#if TRACK_COLOR
+		
 		// NOTE: Using the resized image to track the color
 		cv::Mat input(toOcv(mRGBSurface)), img_hsv_;
 		
@@ -294,19 +307,28 @@ void kinectBasicApp::update()
 
 		threshholdTexture(output);
 //		mTextureBottomRight = threshholdTexture(output);
+		
+		// Add particles to the mix
+		// NOTE: We're always adding 1 particle per frame, even if the ball isn't on the screen	
+		mParticleEmitter.addParticles(20, Vec2i(pointerX, pointerY), mPointerVel);
 
+#endif
+		
+		mParticleEmitter.update(mDepthChannel, mRGBSurface);		
+		
 	}
 	
-	// Add particles to the mix
-	// NOTE: We're always adding 1 particle per frame, even if the ball isn't on the screen	
-	mParticleEmitter.addParticles(1, Vec2i(pointerX, pointerY), mPointerVel);
-	mParticleEmitter.update(mDepthChannel, mRGBSurface);
+	//mParticleEmitter.repulseParticles();
+	//mParticleEmitter.pullToCenter();
+	
 }
 
 void kinectBasicApp::draw()
 {
 	gl::clear( Color( 0, 0, 0 ) ); 
 	gl::setMatricesWindow( getWindowWidth(), getWindowHeight() );
+	
+	gl::color(Color::white());
 	
 	if( mTextureTopLeft )
 		gl::draw( mTextureTopLeft, Vec2i(0, 0) );
@@ -318,8 +340,9 @@ void kinectBasicApp::draw()
 	if( mTextureBottomRight )
 		gl::draw( mTextureBottomRight, Vec2i( 640, 480 ) );
 
-	gl::drawSolidCircle(Vec2f(640+pointerX, pointerY), 10.0);
-	gl::drawSolidCircle(Vec2f(depthPointerX, depthPointerY), 10.0);	 
+	
+//	gl::drawSolidCircle(Vec2f(640+pointerX, pointerY), 10.0);
+//	gl::drawSolidCircle(Vec2f(depthPointerX, depthPointerY), 10.0);	 
 		
 	params::InterfaceGl::draw();
 	

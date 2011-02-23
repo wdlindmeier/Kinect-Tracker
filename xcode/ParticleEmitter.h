@@ -24,5 +24,7 @@ public:
 	void update(const ci::Channel8u &depthChannel, const ci::Surface8u &rgbSurface);
 	void draw();
 	void addParticles(int numParticles, const ci::Vec2i &loc, const ci::Vec2f &velocity);
+	void pullToCenter();
+	void repulseParticles();
 	
 };

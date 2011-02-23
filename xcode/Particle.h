@@ -10,17 +10,20 @@
 #include "cinder/Vector.h"
 #include "cinder/Channel.h"
 #include "cinder/Surface.h"
+#include "cinder/Color.h"
 
 class Particle {
 	
 public:
 	
-	float		mRadius;
-	ci::Vec2f	mLoc, mVel;
+	float		mRadius, mMass;
+	ci::Vec2f	mLoc, mVel, mAcc;
+	ci::Color8u	mColor;
 	
 	Particle();
 	Particle(const ci::Vec2f &loc);
 	void update(const ci::Channel8u &depthChannel, const ci::Surface8u &rgbSurface);
 	void draw();
+	void pullToCenter();
 	
 };
