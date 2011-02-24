@@ -86,12 +86,10 @@ void ParticleEmitter::draw()
 void ParticleEmitter::update(const Channel8u &depthChannel, const Surface8u &rgbSurface)
 {
 	for(list<Particle>::iterator p = mParticles.begin(); p != mParticles.end();){
-		if(1){
+		if(!p->isDead){
 			p->update(depthChannel, rgbSurface);
 			++p;
 		}else{
-			// TODO:
-			// Remove the particle from the collection when it has died
 			p = mParticles.erase(p);
 		}		
 	}

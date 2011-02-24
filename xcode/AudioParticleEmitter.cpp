@@ -41,12 +41,10 @@ void AudioParticleEmitter::draw()
 void AudioParticleEmitter::update()
 {
 	for(list<AudioParticle>::iterator p = mParticles.begin(); p != mParticles.end();){
-		if(1){
+		if(!p->isDead){
             p->update();
 			p++;
 		}else{
-			// TODO:
-			// Remove the particle from the collection when it has died
 			p = mParticles.erase(p);
 		}		
 	}    

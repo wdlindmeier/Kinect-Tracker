@@ -18,7 +18,9 @@
 #include "ParticleEmitter.h"
 #include "AudioParticleEmitter.h"
 
-#define TRACK_COLOR	1
+#define kMinPointerDepth	0.09
+#define kFieldWidth			640
+#define kFieldHeight		480
 
 using namespace ci;
 using namespace ci::app;
@@ -34,14 +36,14 @@ public:
 	void draw();
 	
 	Kinect				mKinect;
-	gl::Texture			mTextureTopLeft, mTextureTopRight;//, mTextureBottomLeft, mTextureBottomRight;
+	gl::Texture			mTextureTopRight, mTextureBottomLeft, mTextureBottomRight; //, mTextureTopLeft;
 	float				mThreshold, mBlobMin, mBlobMax;
 	float				xCalibration, yCalibration, depthCalibration, scaleCalibration;
 	float				pointerX, pointerY, pointerDepth, volume;
     float               mFreqTarget;
 	float               mPhase;
 	float               mPhaseAdjust;
-	float               mMaxFreq;    
+	float               mMaxFreq, mMinFreq;    
     bool                peaked;
 	int					mBlur, mVthresh, mHthresh, mSthresh;
 	int					maxColorThresh, minColorThresh;
@@ -103,10 +105,11 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	pointerY = -100; //100.0;
 	depthPointerX = -100;
 	depthPointerY = -100;
+	pointerDepth = 0.0;
 	
-	settings->setWindowSize( 1280, 960 ); // 480
+	//settings->setWindowSize( 1280, 960 ); // 480
     
-    //settings->setWindowSize( 1280, 480 );
+    settings->setWindowSize( kFieldWidth, kFieldHeight );
     
 	mThreshold = 70.0f;
 	mBlur = 10.0;
@@ -127,9 +130,10 @@ void kinectBasicApp::setup()
 
 	mKinect = Kinect( Kinect::Device() ); // the default Device implies the first Kinect connected
     
-    mKinect.setTilt(0.0);
+    mKinect.setTilt(15.5);
     
 	mMaxFreq = 1000.0f;
+	mMinFreq = 50.0f;
 	mFreqTarget = 0.0f;
 	mPhase = 0.0f;
 	mPhaseAdjust = 0.0f;
@@ -159,67 +163,25 @@ void kinectBasicApp::sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, 
         volume += (0.001 * pointerDepth);        
         val *= sin(volume);
 		
-		ioBuffer->mData[i*ioBuffer->mNumberChannels] = val;
-		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = val;
+//		ioBuffer->mData[i*ioBuffer->mNumberChannels] = val;
+//		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = val;
+
+		float xOffset = (float)pointerX / 640.0;
+		float lVal = val * xOffset;
+		float rVal = val - lVal;
+
+		ioBuffer->mData[i*ioBuffer->mNumberChannels] = lVal;
+		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = rVal;
+		
 	}
 }
-/*
-gl::Texture kinectBasicApp::threshholdTexture(ImageSourceRef depthImage){
 
-	cv::Mat input(toOcv(Channel8u(depthImage))), blurred, thresholded, thresholded2, output;
-	cv::blur(input, blurred, cv::Size(mBlur,mBlur));
-	
-	cv::threshold( blurred, thresholded, mThreshold, 255, CV_THRESH_BINARY);
-	cv::threshold( blurred, thresholded2, mThreshold, 255, CV_THRESH_BINARY);
-	
-	vector< vector<cv::Point> > contours;
-	cv::findContours(thresholded, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
-	cv::cvtColor(thresholded2, output, CV_GRAY2RGB );
-	
-	for (vector<vector<cv::Point> >::iterator it=contours.begin() ; it < contours.end(); it++ ){
-		cv::Point2f center;
-		float radius;
-		vector<cv::Point> pts = *it;
-		cv::Mat pointsMatrix = cv::Mat(pts);
-		cv::minEnclosingCircle(pointsMatrix, center, radius);
-		cv::Scalar color( 0, 255, 0 );
-		if (radius > mBlobMin && radius < mBlobMax) {
-			cv::circle(output, center, radius, color);
-			
-			// Lets point to the first/last one we find
-			// NOTE: Adding the radius to account for the camera parallax offset.
-			// The closer the ball is, the more pronounced the offset is so we can use 
-			// the radius as a rough guide
-			int newPointerX = math<int>::clamp(center.x, 0, 640);
-			int newPointerY = math<int>::clamp(center.y, 0, 480);
-			
-			if(pointerX != -100){
-				// Get the pointer velocity if it's already on stage
-				mPointerVel = Vec2i(pointerX, pointerY) - Vec2i(newPointerX, newPointerY);
-			}else{
-				mPointerVel = Vec2i(0,0);
-			}
-			
-			pointerX = newPointerX;
-			pointerY = newPointerY;
-			
-			depthCalibration = (radius * 0.75);
-			depthPointerX = pointerX + depthCalibration;
-			depthPointerY = pointerY;
-
-		}
-	}
-	
-	return gl::Texture(fromOcv(output));
-	
-}
-*/
 void kinectBasicApp::update()
 {	
     
 	if( mKinect.checkNewDepthFrame() ){
 
-		mTextureTopLeft = mKinect.getDepthImage();
+		mTextureBottomLeft = mKinect.getDepthImage();
 		
 		cv::Mat input(toOcv(mKinect.getDepthImage())), blurred;
 		cv::blur(input, blurred, cv::Size(mBlur, mBlur));
@@ -230,11 +192,14 @@ void kinectBasicApp::update()
 
 
 			// Set the tone according to pointerX
-            float xAmt = pointerX / app::getWindowWidth();            
-			mFreqTarget = math<float>::clamp( xAmt * mMaxFreq, 0.0, mMaxFreq );
+            float xAmt = 1.0 - (pointerX / kFieldWidth);
+			mFreqTarget = math<float>::clamp( mMinFreq + (xAmt * (mMaxFreq - mMinFreq)), mMinFreq, mMaxFreq );
 
             int depth = *mDepthChannel.getData(Vec2i(depthPointerX, depthPointerY));			
-            pointerDepth = (depth / 255.0);            
+			float newPointerDepth = (depth / 255.0);            
+
+			// NOTE: We're just tossing zero depth data
+			if(newPointerDepth > kMinPointerDepth) pointerDepth = newPointerDepth;
 			
 		}else{
 			
@@ -250,21 +215,20 @@ void kinectBasicApp::update()
 		Surface rgbImage(mKinect.getVideoImage());
 		
 		// Resize and crop the rgb to callibrate
-		mRGBSurface = Surface(640, 480, false);
+		mRGBSurface = Surface(kFieldWidth, kFieldHeight, false);
 		int x1 = xCalibration / scaleCalibration * -1.0;
 		int y1 = yCalibration / scaleCalibration * -1.0;
-		int x2 = x1 + (640 / scaleCalibration);
-		int y2 = x1 + (480 / scaleCalibration);
-		ci::ip::resize(rgbImage, Area(x1,y1,x2,y2), &mRGBSurface, Area(0,0,640,480));
+		int x2 = x1 + (kFieldWidth / scaleCalibration);
+		int y2 = x1 + (kFieldHeight / scaleCalibration);
+		ci::ip::resize(rgbImage, Area(x1,y1,x2,y2), &mRGBSurface, Area(0,0,kFieldWidth,kFieldHeight));
 
-		mTextureTopRight = mRGBSurface;
+		if(app::getWindowWidth() > kFieldWidth) mTextureTopRight = mRGBSurface;
 		
 		// NOTE: Using the resized image to track the color
 		cv::Mat input(toOcv(mRGBSurface)), img_hsv_;
 		
 		cv::cvtColor(input, img_hsv_, CV_RGB2HSV);
 
-		//Surface rangeOutput(img_hsv_.cols, img_hsv_.rows, false);
         Channel8u rangeOutput(img_hsv_.cols, img_hsv_.rows);
 		
 		cv::Mat img_hue_, img_sat_, img_val_;
@@ -315,34 +279,45 @@ void kinectBasicApp::update()
         // TEST
         // putting threshold inline
         
-        cv::Mat rangeInput(toOcv(rangeOutput)), blurred, thresholded, thresholded2, output;
-        cv::blur(rangeInput, blurred, cv::Size(mBlur,mBlur));
-        
+        cv::Mat rangeInput(toOcv(rangeOutput)), blurred, thresholded, output;
+        cv::blur(rangeInput, blurred, cv::Size(mBlur,mBlur));        
         cv::threshold( blurred, thresholded, mThreshold, 255, CV_THRESH_BINARY);
+		// For display only
+		cv::threshold( blurred, output, mThreshold, 255, CV_THRESH_BINARY);
         
         vector< vector<cv::Point> > contours;
         cv::findContours(thresholded, contours, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
         
+		float largestHitRadius = 0.0;
+		
         for (vector<vector<cv::Point> >::iterator it=contours.begin() ; it < contours.end(); it++ ){
             cv::Point2f center;
             float radius;
             vector<cv::Point> pts = *it;
             cv::Mat pointsMatrix = cv::Mat(pts);
             cv::minEnclosingCircle(pointsMatrix, center, radius);
-            cv::Scalar color( 0, 255, 0 );
-            if (radius > mBlobMin && radius < mBlobMax) {
-                cv::circle(output, center, radius, color);
+            
+			//cv::Scalar color( 0, 255, 0 );
+			
+            if (radius > mBlobMin && 
+				radius < mBlobMax && 
+				radius > largestHitRadius) {
+								
+				largestHitRadius = radius;
+				
+				// This shows up as a white line on the Channel
+                // cv::circle(output, center, radius, color);
                 
                 // Lets point to the first/last one we find
                 // NOTE: Adding the radius to account for the camera parallax offset.
                 // The closer the ball is, the more pronounced the offset is so we can use 
                 // the radius as a rough guide
-                int newPointerX = math<int>::clamp(center.x, 0, 640);
-                int newPointerY = math<int>::clamp(center.y, 0, 480);
+                int newPointerX = math<int>::clamp(center.x, 0, kFieldWidth);
+                int newPointerY = math<int>::clamp(center.y, 0, kFieldHeight);
                 
                 if(pointerX != -100){
                     // Get the pointer velocity if it's already on stage
-                    mPointerVel = Vec2i(pointerX, pointerY) - Vec2i(newPointerX, newPointerY);
+                    mPointerVel = Vec2i(newPointerX - pointerX, newPointerY - pointerY);// - Vec2i(newPointerX, newPointerY);
                 }else{
                     mPointerVel = Vec2i(0,0);
                 }
@@ -353,20 +328,37 @@ void kinectBasicApp::update()
                 depthCalibration = (radius * 0.75);
                 depthPointerX = pointerX + depthCalibration;
                 depthPointerY = pointerY;
-                
-                // Once we've found one, lets just ditch
-                it = contours.end();
-                
+                                
             }
         }
                 
+		if(app::getWindowWidth() > kFieldWidth && app::getWindowHeight() > kFieldHeight) mTextureBottomRight = fromOcv(output);
+		
         // The number of particles should be determined by phase.
         // Use the depth 
 
         // mParticleEmitter.addParticles(30 * pointerDepth + 1, Vec2i(pointerX, pointerY), mPointerVel);            
         // mParticleEmitter.update(mDepthChannel, mRGBSurface);		
         
-        mAudioParticleEmitter.addParticle(Vec2i(pointerX, pointerY), pointerDepth);
+		if(pointerDepth > kMinPointerDepth){
+			
+			//mAudioParticleEmitter.addParticle(Vec2i(pointerX, pointerY), pointerDepth);
+
+			// For each point between current and previous, make a particle
+			// Divide the number of intermediate particles by the phase (use depth) 
+			
+			// We expect that the closer you are, the more the gaps are filled from one frame to the next
+			float distance = mPointerVel.length();
+			int numParticles = distance * pointerDepth + 1;
+			float xInterval = (float)mPointerVel.x / (float)numParticles;
+			float yInterval = (float)mPointerVel.y / (float)numParticles;
+			for(int p=0;p<numParticles;p++){
+				int newX = pointerX - (xInterval * p);
+				int newY = pointerY - (yInterval * p);
+				mAudioParticleEmitter.addParticle(Vec2i(newX, newY), pointerDepth);
+			}
+		
+		}
         mAudioParticleEmitter.update();
         
 	}    
@@ -379,23 +371,20 @@ void kinectBasicApp::draw()
 	gl::setMatricesWindow( getWindowWidth(), getWindowHeight() );
 	gl::color(Color::white());
 
-	if( mTextureTopLeft )
-		gl::draw( mTextureTopLeft, Vec2i(0, 0) );
+//	if( mTextureTopLeft )
+//		gl::draw( mTextureTopLeft, Vec2i(0, 0) );
 	if( mTextureTopRight )
-		gl::draw( mTextureTopRight, Vec2i( 640, 0) );
-    /*
+		gl::draw( mTextureTopRight, Vec2i( kFieldWidth, 0) );
 	if( mTextureBottomLeft )
-		gl::draw( mTextureBottomLeft, Vec2i( 0, 480 ) );
+		gl::draw( mTextureBottomLeft, Vec2i( 0, kFieldHeight ) );
 	if( mTextureBottomRight )
-		gl::draw( mTextureBottomRight, Vec2i( 640, 480 ) );
+		gl::draw( mTextureBottomRight, Vec2i( kFieldWidth, kFieldHeight ) );
      
 	
 //	params::InterfaceGl::draw();
 	
-    */
-
-	gl::drawSolidCircle(Vec2f(640+pointerX, pointerY), 10.0);
-	gl::drawSolidCircle(Vec2f(depthPointerX, depthPointerY), 10.0);	 
+	gl::drawSolidCircle(Vec2f(kFieldWidth+pointerX, pointerY), 10.0);
+	gl::drawSolidCircle(Vec2f(depthPointerX, kFieldHeight + depthPointerY), 10.0);	 
     
 	// mParticleEmitter.draw();
     mAudioParticleEmitter.draw();

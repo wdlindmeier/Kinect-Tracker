@@ -20,6 +20,7 @@ class Particle {
 public:
 	
 	float		mRadius, mMass;
+	bool		isDead;
 	ci::Vec2f	mLoc, mVel, mAcc;
 	ci::Color8u	mColor;
 	
