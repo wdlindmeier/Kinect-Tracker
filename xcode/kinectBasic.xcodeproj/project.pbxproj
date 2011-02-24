@@ -16,6 +16,8 @@
 		00B784B60FF439BC000DE1D7 /* CoreAudio.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 00B784B20FF439BC000DE1D7 /* CoreAudio.framework */; };
 		00BAE65A0E7ED9C10018A608 /* kinectBasicApp.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 00BAE6590E7ED9C10018A608 /* kinectBasicApp.cpp */; };
 		00CCAF15116A9FEE008396D5 /* CinderApp.icns in Resources */ = {isa = PBXBuildFile; fileRef = 00CCAF14116A9FEE008396D5 /* CinderApp.icns */; };
+		192DCA241315D14D00F37DFD /* AudioParticle.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 192DCA231315D14D00F37DFD /* AudioParticle.cpp */; };
+		192DCA271315D15A00F37DFD /* AudioParticleEmitter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 192DCA261315D15A00F37DFD /* AudioParticleEmitter.cpp */; };
 		5323E6B20EAFCA74003A9687 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5323E6B10EAFCA74003A9687 /* CoreVideo.framework */; };
 		5323E6B60EAFCA7E003A9687 /* QTKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 5323E6B50EAFCA7E003A9687 /* QTKit.framework */; };
 		8D11072F0486CEB800E47090 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */; };
@@ -37,6 +39,10 @@
 		00CCAF14116A9FEE008396D5 /* CinderApp.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; name = CinderApp.icns; path = ../resources/CinderApp.icns; sourceTree = SOURCE_ROOT; };
 		1058C7A1FEA54F0111CA2CBB /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = /System/Library/Frameworks/Cocoa.framework; sourceTree = "<absolute>"; };
 		13E42FB307B3F0F600E4EEF1 /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = /System/Library/Frameworks/CoreData.framework; sourceTree = "<absolute>"; };
+		192DCA221315D14D00F37DFD /* AudioParticle.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AudioParticle.h; sourceTree = "<group>"; };
+		192DCA231315D14D00F37DFD /* AudioParticle.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AudioParticle.cpp; sourceTree = "<group>"; };
+		192DCA251315D15A00F37DFD /* AudioParticleEmitter.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AudioParticleEmitter.h; sourceTree = "<group>"; };
+		192DCA261315D15A00F37DFD /* AudioParticleEmitter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AudioParticleEmitter.cpp; sourceTree = "<group>"; };
 		29B97324FDCFA39411CA2CEA /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = /System/Library/Frameworks/AppKit.framework; sourceTree = "<absolute>"; };
 		29B97325FDCFA39411CA2CEA /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = /System/Library/Frameworks/Foundation.framework; sourceTree = "<absolute>"; };
 		32CA4F630368D1EE00C91783 /* kinectBasic_Prefix.pch */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = kinectBasic_Prefix.pch; sourceTree = "<group>"; };
@@ -76,6 +82,8 @@
 		080E96DDFE201D6D7F000001 /* Source */ = {
 			isa = PBXGroup;
 			children = (
+				192DCA231315D14D00F37DFD /* AudioParticle.cpp */,
+				192DCA261315D15A00F37DFD /* AudioParticleEmitter.cpp */,
 				00312AD41298780D009DC098 /* Kinect.cpp */,
 				00BAE6590E7ED9C10018A608 /* kinectBasicApp.cpp */,
 				A9FF6C521314BC4C00B49958 /* Particle.cpp */,
@@ -135,6 +143,8 @@
 		29B97315FDCFA39411CA2CEA /* Headers */ = {
 			isa = PBXGroup;
 			children = (
+				192DCA221315D14D00F37DFD /* AudioParticle.h */,
+				192DCA251315D15A00F37DFD /* AudioParticleEmitter.h */,
 				32CA4F630368D1EE00C91783 /* kinectBasic_Prefix.pch */,
 				A9FF6C511314BC4C00B49958 /* Particle.h */,
 				A9FF6C541314BC5300B49958 /* ParticleEmitter.h */,
@@ -234,6 +244,8 @@
 				00312AD51298780D009DC098 /* Kinect.cpp in Sources */,
 				A9FF6C531314BC4C00B49958 /* Particle.cpp in Sources */,
 				A9FF6C561314BC5300B49958 /* ParticleEmitter.cpp in Sources */,
+				192DCA241315D14D00F37DFD /* AudioParticle.cpp in Sources */,
+				192DCA271315D15A00F37DFD /* AudioParticleEmitter.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -35,6 +35,14 @@ void Particle::pullToCenter()
 
 #define kRadiusMultiplier	5.0
 
+void Particle::update()
+{
+    // Putting this here purely to appease the subclass.
+    // Dont use
+    std::cout << "p up" << std::endl;
+
+}
+
 void Particle::update(const Channel8u &depthChannel, const Surface8u &rgbSurface)
 {
 	mVel += mAcc;

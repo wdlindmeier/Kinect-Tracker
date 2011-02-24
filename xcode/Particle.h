@@ -7,6 +7,9 @@
  *
  */
 
+#ifndef PARTICLE
+#define PARTICLE
+
 #include "cinder/Vector.h"
 #include "cinder/Channel.h"
 #include "cinder/Surface.h"
@@ -22,8 +25,11 @@ public:
 	
 	Particle();
 	Particle(const ci::Vec2f &loc);
+    void update();
 	void update(const ci::Channel8u &depthChannel, const ci::Surface8u &rgbSurface);
 	void draw();
 	void pullToCenter();
 	
 };
+
+#endif

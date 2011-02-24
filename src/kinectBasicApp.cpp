@@ -16,6 +16,7 @@
 #include "CinderOpenCV.h"
 
 #include "ParticleEmitter.h"
+#include "AudioParticleEmitter.h"
 
 #define TRACK_COLOR	1
 
@@ -31,8 +32,6 @@ public:
 	void mouseDown( MouseEvent event );
 	void update();
 	void draw();
-	
-//	gl::Texture			threshholdTexture(ImageSourceRef depthImage);
 	
 	Kinect				mKinect;
 	gl::Texture			mTextureTopLeft, mTextureTopRight;//, mTextureBottomLeft, mTextureBottomRight;
@@ -50,10 +49,11 @@ public:
 	int					depthPointerX, depthPointerY;
 
 	//params::InterfaceGl	mParams;
-	ParticleEmitter		mParticleEmitter;
-	Channel8u			mDepthChannel;
-	Surface				mRGBSurface;
-	Vec2f				mPointerVel;
+	ParticleEmitter         mParticleEmitter;
+    AudioParticleEmitter	mAudioParticleEmitter;
+	Channel8u               mDepthChannel;
+	Surface                 mRGBSurface;
+	Vec2f                   mPointerVel;
 	
 	// Audio
 	void sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, audio::Buffer32f *ioBuffer );
@@ -362,9 +362,13 @@ void kinectBasicApp::update()
                 
         // The number of particles should be determined by phase.
         // Use the depth 
-        mParticleEmitter.addParticles(30 * pointerDepth + 1, Vec2i(pointerX, pointerY), mPointerVel);            
+
+        // mParticleEmitter.addParticles(30 * pointerDepth + 1, Vec2i(pointerX, pointerY), mPointerVel);            
+        // mParticleEmitter.update(mDepthChannel, mRGBSurface);		
         
-        mParticleEmitter.update(mDepthChannel, mRGBSurface);		
+        mAudioParticleEmitter.addParticle(Vec2i(pointerX, pointerY), pointerDepth);
+        mAudioParticleEmitter.update();
+        
 	}    
 }
 
@@ -393,7 +397,8 @@ void kinectBasicApp::draw()
 	gl::drawSolidCircle(Vec2f(640+pointerX, pointerY), 10.0);
 	gl::drawSolidCircle(Vec2f(depthPointerX, depthPointerY), 10.0);	 
     
-	mParticleEmitter.draw();
+	// mParticleEmitter.draw();
+    mAudioParticleEmitter.draw();
     
     //console() << "volumePhase: " << volumePhase << std::endl;
 	
