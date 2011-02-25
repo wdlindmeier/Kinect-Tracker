@@ -18,6 +18,7 @@
 #include "ParticleEmitter.h"
 #include "AudioParticleEmitter.h"
 
+#define	kMaxFalsePositives	3
 #define kMinPointerDepth	0.09
 #define kFieldWidth			640
 #define kFieldHeight		480
@@ -51,6 +52,7 @@ public:
 	int					mColorMode, minSaturation, minVal;
 	int					depthPointerX, depthPointerY;
     int                 whichColor;
+	int					mNumFalsePositives;
 
 	params::InterfaceGl	mParams;
 	ParticleEmitter         mParticleEmitter;
@@ -94,7 +96,7 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	// YELLOW:		100-125
 	// ORANGE:		120-140
     
-    whichColor      =   2; // 0 == orange ball, 1 == green cap, 2 == yellow ball
+    whichColor      =   0; // 0 == orange ball, 1 == green cap, 2 == yellow ball, 3 == yellow light bulb
 		
     switch (whichColor) {
         case 0:
@@ -121,6 +123,13 @@ void kinectBasicApp::prepareSettings( Settings* settings )
             minVal		   = 155; // Val == Darkness	    
             mDepthCalibrarionRadiusMultiplier = 0.3;
             break;
+		case 3:
+			// Yellow light bulb
+            minColorThresh = 100;
+            maxColorThresh = 110;
+            minSaturation  = 140;
+            minVal		   = 90; // Val == Darkness	    
+            mDepthCalibrarionRadiusMultiplier = 0.4;			
     }
 	
 	xCalibration = -22.0;
@@ -156,7 +165,7 @@ void kinectBasicApp::setup()
 	mKinect = Kinect( Kinect::Device() ); // the default Device implies the first Kinect connected
     
     //mKinect.setTilt(15.5);
-    mKinect.setTilt(5.0);
+    mKinect.setTilt(15.0);
     
 	mMaxFreq = 1000.0f;
 	mMinFreq = 50.0f;
@@ -189,7 +198,8 @@ void kinectBasicApp::sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, 
         val = math<float>::clamp(val, 0, 1000000);
                 
         // Undulate the volume according to depth (closer == faster)
-        volume += (0.001 * (pointerDepth * 1.5));        
+        volume = fmod(volume + (0.001 * (pointerDepth * 1.5)), 1000.0);        
+		
         val *= sin(volume);
 
         // No Panning
@@ -202,10 +212,8 @@ void kinectBasicApp::sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, 
 		float rVal = val - lVal;
 
         // Also make it generally quieter when its further away
-        if(pointerDepth > kMinPointerDepth){
-            lVal *= pointerDepth;
-            rVal *= pointerDepth;            
-        }
+		lVal *= pointerDepth;
+		rVal *= pointerDepth;            
 
 		ioBuffer->mData[i*ioBuffer->mNumberChannels] = lVal;
 		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = rVal;
@@ -240,7 +248,22 @@ void kinectBasicApp::update()
 			float newPointerDepth = (depth / 255.0);            
 
 			// NOTE: We're just tossing zero depth data
-			if(newPointerDepth > kMinPointerDepth) pointerDepth = newPointerDepth;
+			if(newPointerDepth > kMinPointerDepth){
+				if(pointerDepth < kMinPointerDepth ||				// The ball just entered the frame 
+				   fabs(pointerDepth - newPointerDepth) < 0.2 ||	// The leap was a gradual one
+				   mNumFalsePositives >= kMaxFalsePositives){		// There have been too many false positives
+
+					// NOTE: If the depth takes a big leap, don't report it since its likely a Kinect artifact
+					pointerDepth = newPointerDepth;
+					
+					mNumFalsePositives = 0;
+
+				}else{
+					
+					mNumFalsePositives++;
+					
+				}
+			}
 			
 		}else{
 			
@@ -285,12 +308,16 @@ void kinectBasicApp::update()
 		{
 			for(int j = 0; j < img_hsv_.cols; j++)
 			{
+				uchar hue = img_hue_.at<uchar>(i,j);
+				uchar sat = img_sat_.at<uchar>(i,j);
+				uchar val = img_val_.at<uchar>(i,j);
+				
 				// The output pixel is white if the input pixel
 				// hue is orange and saturation is reasonable
-				if(img_hue_.at<uchar>(i,j) > minColorThresh &&
-				   img_hue_.at<uchar>(i,j) < maxColorThresh &&
-				   img_sat_.at<uchar>(i,j) > minSaturation && 
-				   img_val_.at<uchar>(i,j) > minVal ) {
+				if(hue > minColorThresh &&
+				   hue < maxColorThresh &&
+				   sat > minSaturation && 
+				   val > minVal ) {
 					//rangeOutput.setPixel(Vec2i(j,i), Color8u(255,255,255));
                     rangeOutput.setValue(Vec2i(j,i), 255);
 				} else {
@@ -383,7 +410,7 @@ void kinectBasicApp::update()
         // mParticleEmitter.addParticles(30 * pointerDepth + 1, Vec2i(pointerX, pointerY), mPointerVel);            
         // mParticleEmitter.update(mDepthChannel, mRGBSurface);		
         
-		if(pointerDepth > kMinPointerDepth){
+//		if(pointerDepth > kMinPointerDepth){
 			
 			//mAudioParticleEmitter.addParticle(Vec2i(pointerX, pointerY), pointerDepth);
 
@@ -401,7 +428,7 @@ void kinectBasicApp::update()
 				mAudioParticleEmitter.addParticle(Vec2i(newX, newY), pointerDepth);
 			}
 		
-		}
+//		}
         mAudioParticleEmitter.update();
         
 	}    
@@ -423,11 +450,11 @@ void kinectBasicApp::draw()
 	if( mTextureBottomRight )
 		gl::draw( mTextureBottomRight, Vec2i( kFieldWidth, kFieldHeight ) );
      	
-	params::InterfaceGl::draw();
+//	params::InterfaceGl::draw();
 	
 	gl::drawSolidCircle(Vec2f(kFieldWidth+pointerX, pointerY), 10.0);
 	gl::drawSolidCircle(Vec2f(depthPointerX, kFieldHeight + depthPointerY), 10.0);	 
-    
+	
 	// mParticleEmitter.draw();
     mAudioParticleEmitter.draw();
     
