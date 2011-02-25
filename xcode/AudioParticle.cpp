@@ -17,11 +17,11 @@ using namespace ci;
 AudioParticle::AudioParticle(const Vec2f &loc, float aDepth)
 {
 	mLoc		= loc;
-	mRadius		= 0.0;
+	mRadius		= 5.0 * aDepth;
 	mVel		= Vec2f::zero();
 	mColor		= Color8u(255,255,255);
 	mAcc		= Vec2f::zero();
-    age         = 0;
+    age         = 0.0;
     depth       = aDepth;
 }
 
@@ -29,7 +29,7 @@ AudioParticle::AudioParticle(const Vec2f &loc, float aDepth)
 
 void AudioParticle::update()
 {
-    age++;
+    age+=5;
 
     // The closer the faster growing
     mRadius += (depth * 1.5);

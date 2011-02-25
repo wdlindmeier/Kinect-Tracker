@@ -44,13 +44,15 @@ public:
 	float               mPhase;
 	float               mPhaseAdjust;
 	float               mMaxFreq, mMinFreq;    
+    float               mDepthCalibrarionRadiusMultiplier;
     bool                peaked;
 	int					mBlur, mVthresh, mHthresh, mSthresh;
 	int					maxColorThresh, minColorThresh;
 	int					mColorMode, minSaturation, minVal;
 	int					depthPointerX, depthPointerY;
+    int                 whichColor;
 
-	//params::InterfaceGl	mParams;
+	params::InterfaceGl	mParams;
 	ParticleEmitter         mParticleEmitter;
     AudioParticleEmitter	mAudioParticleEmitter;
 	Channel8u               mDepthChannel;
@@ -91,12 +93,35 @@ void kinectBasicApp::prepareSettings( Settings* settings )
 	// GREEN:		20-120
 	// YELLOW:		100-125
 	// ORANGE:		120-140
+    
+    whichColor      =   2; // 0 == orange ball, 1 == green cap, 2 == yellow ball
 		
-	// Orange Ping Pong Ball
-	minColorThresh = 100;
-	maxColorThresh = 130;
-	minSaturation  = 170;
-	minVal		   = 180; // Val == Darkness	
+    switch (whichColor) {
+        case 0:
+            // Orange Ping Pong Ball
+            minColorThresh = 100;
+            maxColorThresh = 130;
+            minSaturation  = 170;
+            minVal		   = 180; // Val == Darkness	
+            mDepthCalibrarionRadiusMultiplier = 0.6;
+            break;
+        case 1:
+            // Green Marker Cap
+            minColorThresh = 50;
+            maxColorThresh = 90;
+            minSaturation  = 35;
+            minVal		   = 30; // Val == Darkness	
+            mDepthCalibrarionRadiusMultiplier = 1.2;            
+            break;
+        case 2:
+            // Yellow Ball
+            minColorThresh = 90;
+            maxColorThresh = 110;
+            minSaturation  = 170;
+            minVal		   = 155; // Val == Darkness	    
+            mDepthCalibrarionRadiusMultiplier = 0.3;
+            break;
+    }
 	
 	xCalibration = -22.0;
 	yCalibration = -34.0;
@@ -113,16 +138,16 @@ void kinectBasicApp::prepareSettings( Settings* settings )
     
 	mThreshold = 70.0f;
 	mBlur = 10.0;
-	mBlobMin = 5.0;
+	mBlobMin = 3.0;
 	mBlobMax = 100.0;
-    /*
+
 	mParams = params::InterfaceGl("WakaWaka", Vec2i(200,100));
 	
 	mParams.addParam( "minColorThresh", &minColorThresh, "min=0.0 max=180.0 step=5.0 keyIncr=2 keyDecr=1");
 	mParams.addParam( "maxColorThresh", &maxColorThresh, "min=0.0 max=180.0 step=5.0 keyIncr=0 keyDecr=9");
 	mParams.addParam( "minSaturation", &minSaturation, "min=0.0 max=255.0 step=5.0 keyIncr=w keyDecr=s");
 	mParams.addParam( "minVal", &minVal, "min=0.0 max=255.0 step=5.0 keyIncr=f keyDecr=v");	
-	*/
+	
 }
 
 void kinectBasicApp::setup()
@@ -130,7 +155,8 @@ void kinectBasicApp::setup()
 
 	mKinect = Kinect( Kinect::Device() ); // the default Device implies the first Kinect connected
     
-    mKinect.setTilt(15.5);
+    //mKinect.setTilt(15.5);
+    mKinect.setTilt(5.0);
     
 	mMaxFreq = 1000.0f;
 	mMinFreq = 50.0f;
@@ -159,16 +185,27 @@ void kinectBasicApp::sineWave( uint64_t inSampleOffset, uint32_t ioSampleCount, 
 
 		float val = math<float>::sin( mPhase * 2.0f * M_PI );
         
-        // The volume should undulate. Depth should influence how fast
-        volume += (0.001 * pointerDepth);        
+        // Changes the tone
+        val = math<float>::clamp(val, 0, 1000000);
+                
+        // Undulate the volume according to depth (closer == faster)
+        volume += (0.001 * (pointerDepth * 1.5));        
         val *= sin(volume);
-		
+
+        // No Panning
 //		ioBuffer->mData[i*ioBuffer->mNumberChannels] = val;
 //		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = val;
 
+        // Panning
 		float xOffset = (float)pointerX / 640.0;
 		float lVal = val * xOffset;
 		float rVal = val - lVal;
+
+        // Also make it generally quieter when its further away
+        if(pointerDepth > kMinPointerDepth){
+            lVal *= pointerDepth;
+            rVal *= pointerDepth;            
+        }
 
 		ioBuffer->mData[i*ioBuffer->mNumberChannels] = lVal;
 		ioBuffer->mData[i*ioBuffer->mNumberChannels + 1] = rVal;
@@ -194,6 +231,10 @@ void kinectBasicApp::update()
 			// Set the tone according to pointerX
             float xAmt = 1.0 - (pointerX / kFieldWidth);
 			mFreqTarget = math<float>::clamp( mMinFreq + (xAmt * (mMaxFreq - mMinFreq)), mMinFreq, mMaxFreq );
+            
+            // Set the tone according to momentum
+//            float xAmt = mPointerVel.length() / 20.0;
+//            mFreqTarget = math<float>::clamp( mMinFreq + (xAmt * (mMaxFreq - mMinFreq)), mMinFreq, mMaxFreq );
 
             int depth = *mDepthChannel.getData(Vec2i(depthPointerX, depthPointerY));			
 			float newPointerDepth = (depth / 255.0);            
@@ -325,7 +366,9 @@ void kinectBasicApp::update()
                 pointerX = newPointerX;
                 pointerY = newPointerY;
                 
-                depthCalibration = (radius * 0.75);
+                // This works for a ping pong ball, but not for other things
+                depthCalibration = (radius * mDepthCalibrarionRadiusMultiplier);
+                
                 depthPointerX = pointerX + depthCalibration;
                 depthPointerY = pointerY;
                                 
@@ -349,7 +392,7 @@ void kinectBasicApp::update()
 			
 			// We expect that the closer you are, the more the gaps are filled from one frame to the next
 			float distance = mPointerVel.length();
-			int numParticles = distance * pointerDepth + 1;
+			int numParticles = (distance * pointerDepth * 0.1) + 1;
 			float xInterval = (float)mPointerVel.x / (float)numParticles;
 			float yInterval = (float)mPointerVel.y / (float)numParticles;
 			for(int p=0;p<numParticles;p++){
@@ -379,9 +422,8 @@ void kinectBasicApp::draw()
 		gl::draw( mTextureBottomLeft, Vec2i( 0, kFieldHeight ) );
 	if( mTextureBottomRight )
 		gl::draw( mTextureBottomRight, Vec2i( kFieldWidth, kFieldHeight ) );
-     
-	
-//	params::InterfaceGl::draw();
+     	
+	params::InterfaceGl::draw();
 	
 	gl::drawSolidCircle(Vec2f(kFieldWidth+pointerX, pointerY), 10.0);
 	gl::drawSolidCircle(Vec2f(depthPointerX, kFieldHeight + depthPointerY), 10.0);	 

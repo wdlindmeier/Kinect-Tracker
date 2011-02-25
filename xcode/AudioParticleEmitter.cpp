@@ -14,7 +14,7 @@ using namespace std;
 
 AudioParticleEmitter::AudioParticleEmitter()
 {
-    mMaxParticles	= 1000;
+    mMaxParticles	= 10000;
 }
 
 void AudioParticleEmitter::addParticle(const ci::Vec2i &loc, float depth)
